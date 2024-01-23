@@ -7,7 +7,21 @@ import numpy as np
 import statsmodels.api as sm
 
 def read_csv(csv_file_name, country_col='Country'):
-    # Read and filter data from a CSV file for all countries.
+    """
+    Read and filter data from a CSV file for all countries.
+
+    Parameters
+    ----------
+    csv_file_name : str
+        The name of the CSV file to read.
+    country_col : str, optional
+        The column name containing country names. Default is 'Country'.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with filtered data.
+    """
     data = pd.read_csv(csv_file_name)
     if country_col in data.columns:
         data.set_index(country_col, inplace=True)
@@ -16,7 +30,21 @@ def read_csv(csv_file_name, country_col='Country'):
     return data
 
 def perform_clustering(data, year):
-    # Perform clustering for all countries using literacy rate and GDP per capita for a specific year.
+    """
+    Perform clustering for all countries using literacy rate and GDP per capita for a specific year.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing literacy rate and GDP per capita data.
+    year : int
+        The specific year for clustering.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with clustering results.
+    """
     data_year = data[data['Year'] == year]
     features = data_year[['Happiness Score', 'GDP per Capita']]
     features = features.dropna()
@@ -28,6 +56,27 @@ def perform_clustering(data, year):
     return data_year
 
 def perform_data_fitting(data, target_country, target_variable, fitting_year=2025, forecast_years=5):
+    """
+    Perform data fitting, prediction, and forecast for a selected country and variable.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing the data.
+    target_country : str
+        The country for which data fitting is performed.
+    target_variable : str
+        The variable for which data fitting is performed.
+    fitting_year : int, optional
+        The year until which data is predicted. Default is 2025.
+    forecast_years : int, optional
+        The number of years to forecast beyond the fitting year. Default is 5.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with actual, predicted, and forecasted values.
+    """
     country_data = data.loc[[target_country], ['Year', target_variable]].dropna()
 
     if len(country_data) < 2:
