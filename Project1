@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import numpy as np
 import statsmodels.api as sm
 from scipy.optimize import curve_fit
@@ -71,13 +71,18 @@ def perform_clustering(data, year):
         DataFrame with clustering results.
     """
     data_year = data[data['Year'] == year]
-    features = data_year[['Happiness Score', 'GDP per Capita']]
-    features = features.dropna()
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(features)
+    features = data_year[['GDP per Capita', 'Literacy Rate']]
+
+    # Apply Min-Max scaling for normalization
+    scaler = MinMaxScaler()
+    normalized_data = scaler.fit_transform(features)
+    normalized_features = pd.DataFrame(
+        normalized_data, columns=features.columns, index=features.index)
+
     num_clusters = 3
     kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-    data_year['Cluster'] = kmeans.fit_predict(scaled_data)
+    data_year['Cluster'] = kmeans.fit_predict(normalized_features)
+
     return data_year
 
 
