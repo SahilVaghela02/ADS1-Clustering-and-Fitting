@@ -1,0 +1,91 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+
+
+def read_csv(csv_file_name, country_col='Country'):
+    """
+    Read and filter data from a CSV file for all countries.
+
+    Parameters
+    ----------
+    csv_file_name : str
+        The name of the CSV file to read.
+    country_col : str, optional
+        The column name containing country names. Default is 'Country'.
+
+    Returns
+    -------
+    pd.DataFrame
+        Transposed and cleaned DataFrame.
+    """
+    # Reading CSV file and preprocess data
+    data = pd.read_csv(csv_file_name, skiprows=[1])  # Skip the second row
+
+    # Print the column names for debugging
+    print("Column Names:", data.columns)
+
+    # Transpose the DataFrame
+    data = data.transpose()
+
+    # Set the first row as the column headers
+    new_header = data.iloc[0]
+    data = data[1:]
+    data.columns = new_header
+
+    # Set the specified column as the index
+    if country_col in data.columns:
+        data.set_index(country_col, inplace=True)
+    else:
+        raise ValueError(f"Column '{country_col}' not found in the DataFrame.")
+
+    # Clean the data (remove unnecessary rows or columns)
+
+    return data
+
+
+def perform_clustering(data):
+    """
+    Perform clustering for all countries using literacy rate and GDP per capita.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing literacy rate and GDP per capita data.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with clustering results.
+    """
+    clustered_data = pd.DataFrame()
+
+    for country in data.index:
+        # Select data for the given country
+        country_data = data.loc[[country], ['Literacy', 'GDP per Capita']]
+
+        # Handle missing values if any
+        country_data = country_data.dropna()
+
+        # Check if there are enough data points for clustering
+        if len(country_data) < 3:
+            print(
+                f"Skipping clustering for {country} due to insufficient data points.")
+            continue
+
+        # Standardize the data before clustering
+        scaler = StandardScaler()
+        scaled_data = scaler.fit_transform(country_data)
+
+        # Set the number of clusters
+        num_clusters = 3  # You can adjust this value based on your preference
+
+        # Apply K-Means clustering
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+        country_data['Cluster'] = kmeans.fit_predict(scaled_data)
+
+        # Append the clustered data for the current country to the overall DataFrame
+        clustered_data = pd.concat([clustered_data, country_data])
+
+    return clustered_data
