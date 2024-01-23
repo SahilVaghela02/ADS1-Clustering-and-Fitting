@@ -2,115 +2,96 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-
+from sklearn.linear_model import LinearRegression
+import numpy as np
+import statsmodels.api as sm
 
 def read_csv(csv_file_name, country_col='Country'):
-    """
-    Read and filter data from a CSV file for all countries.
-
-    Parameters
-    ----------
-    csv_file_name : str
-        The name of the CSV file to read.
-    country_col : str, optional
-        The column name containing country names. Default is 'Country'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Transposed and cleaned DataFrame.
-    """
-    # Reading CSV file and preprocess data
-    data = pd.read_csv(csv_file_name, skiprows=[1])  # Skip the second row
-
-    # Print the column names for debugging
-    print("Column Names:", data.columns)
-
-    # Transpose the DataFrame
-    data = data.transpose()
-
-    # Set the first row as the column headers
-    new_header = data.iloc[0]
-    data = data[1:]
-    data.columns = new_header
-
-    # Set the specified column as the index
+    # Read and filter data from a CSV file for all countries.
+    data = pd.read_csv(csv_file_name)
     if country_col in data.columns:
         data.set_index(country_col, inplace=True)
     else:
         raise ValueError(f"Column '{country_col}' not found in the DataFrame.")
-
-    # Clean the data (remove unnecessary rows or columns)
-
     return data
 
+def perform_clustering(data, year):
+    # Perform clustering for all countries using literacy rate and GDP per capita for a specific year.
+    data_year = data[data['Year'] == year]
+    features = data_year[['Happiness Score', 'GDP per Capita']]
+    features = features.dropna()
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(features)
+    num_clusters = 3
+    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+    data_year['Cluster'] = kmeans.fit_predict(scaled_data)
+    return data_year
 
-def perform_clustering(data):
-    """
-    Perform clustering for all countries using literacy rate and GDP per capita.
+def perform_data_fitting(data, target_country, target_variable, fitting_year=2025, forecast_years=5):
+    country_data = data.loc[[target_country], ['Year', target_variable]].dropna()
 
-    Parameters
-    ----------
-    data : pd.DataFrame
-        DataFrame containing literacy rate and GDP per capita data.
+    if len(country_data) < 2:
+        print(f"Insufficient data points for {target_country}. Cannot perform fitting and prediction.")
+        return
 
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with clustering results.
-    """
-    clustered_data = pd.DataFrame()
+    # Convert literacy rate to percentage
+    country_data[target_variable] = country_data[target_variable] * 100
 
-    for country in data.index:
-        # Select data for the given country
-        country_data = data.loc[[country], ['Literacy', 'GDP per Capita']]
+    # Fit a linear regression model
+    X = sm.add_constant(country_data[['Year']])
+    model = sm.OLS(country_data[target_variable], X)
+    results = model.fit()
 
-        # Handle missing values if any
-        country_data = country_data.dropna()
+    # Predict for existing years
+    existing_years = country_data['Year'].values
+    existing_X = sm.add_constant(existing_years)
+    existing_predictions = results.get_prediction(existing_X)
 
-        # Check if there are enough data points for clustering
-        if len(country_data) < 3:
-            print(
-                f"Skipping clustering for {country} due to insufficient data points.")
-            continue
+    # Extract predicted and confidence interval for existing years
+    existing_predicted_values = existing_predictions.predicted_mean
+    existing_conf_int = existing_predictions.conf_int()
 
-        # Standardize the data before clustering
-        scaler = StandardScaler()
-        scaled_data = scaler.fit_transform(country_data)
+    # Predict for future years (including forecast)
+    future_years = np.arange(existing_years[-1] + 1, fitting_year + forecast_years + 1).reshape(-1, 1)
+    future_X = sm.add_constant(future_years)
+    future_predictions = results.get_prediction(future_X)
 
-        # Set the number of clusters
-        num_clusters = 3  # You can adjust this value based on your preference
+    # Extract predicted and confidence interval for future years
+    future_predicted_values = future_predictions.predicted_mean
+    future_conf_int = future_predictions.conf_int()
 
-        # Apply K-Means clustering
-        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-        country_data['Cluster'] = kmeans.fit_predict(scaled_data)
+    # Combine actual, predicted, and forecasted values into a DataFrame
+    result_df = pd.DataFrame({
+        'Year': np.concatenate([existing_years, future_years.flatten()]),
+        'Actual': np.concatenate([country_data[target_variable].values, np.nan * np.ones(future_years.shape[0])]),
+        'Predicted': np.concatenate([existing_predicted_values, future_predicted_values]),
+        'Lower CI': np.concatenate([existing_conf_int[:, 0], future_conf_int[:, 0]]),
+        'Upper CI': np.concatenate([existing_conf_int[:, 1], future_conf_int[:, 1]])
+    })
 
-        # Append the clustered data for the current country to the overall DataFrame
-        clustered_data = pd.concat([clustered_data, country_data])
+    # Visualize the results
+    plt.figure(figsize=(10, 6))
+    plt.scatter(result_df['Year'], result_df['Actual'], label=f'{target_country} - Actual Data')
+    plt.plot(result_df['Year'], result_df['Predicted'], label=f'{target_country} - Predicted Data', linestyle='--')
+    plt.fill_between(result_df['Year'], result_df['Lower CI'], result_df['Upper CI'],
+                     color='gray', alpha=0.2, label='Confidence Interval')
 
-    return clustered_data
+    # Highlight the forecasted region
+    plt.axvspan(existing_years[-1], fitting_year + forecast_years, color='yellow', alpha=0.2, label='Forecast')
 
-# Data Loading, Transposition, and Cleaning
-data = read_csv(
-    "D:\Applied data science project/Combined_Data.csv", country_col='Country')
+    plt.title(f'Time Series Fitting and Forecast for {target_country} - {target_variable}')
+    plt.xlabel('Year')
+    plt.ylabel(f'{target_variable} (%)')  # Display y-axis as percentage
+    plt.legend()
+    plt.show()
+
+    return result_df
+
+# Data Loading
+data = read_csv("D:\Applied data science project/Combined_Data.csv", country_col='Country')
+
+# Choose a specific year for clustering
+clustering_year = 2020
 
 # Perform clustering for all countries
-all_clustered_data = perform_clustering(data)
-
-# Display clustered results
-print(all_clustered_data)
-
-# Plot the clustered results
-plt.figure(figsize=(10, 6))
-
-# Scatter plot for each cluster
-for cluster_num in range(all_clustered_data['Cluster'].nunique()):
-    cluster_data = all_clustered_data[all_clustered_data['Cluster'] == cluster_num]
-    plt.scatter(cluster_data['GDP per Capita'],
-                cluster_data['Literacy'], label=f'Cluster {cluster_num}')
-
-plt.title('Clustering for All Countries')
-plt.xlabel('GDP per Capita')
-plt.ylabel('Literacy Rate')
-plt.legend()
-plt.show()
+all_clustered_data = perform_clustering(data, clustering_year)
