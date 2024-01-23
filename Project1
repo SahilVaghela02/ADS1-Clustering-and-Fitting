@@ -2,9 +2,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
 import numpy as np
 import statsmodels.api as sm
+from scipy.optimize import curve_fit
+
 
 def read_csv(csv_file_name, country_col='Country'):
     """
@@ -28,6 +29,30 @@ def read_csv(csv_file_name, country_col='Country'):
     else:
         raise ValueError(f"Column '{country_col}' not found in the DataFrame.")
     return data
+
+
+def clean_and_transpose(data):
+    """
+    Clean and transpose the DataFrame.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Original DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        Transposed and cleaned DataFrame.
+    """
+    # Drop rows with missing values
+    data_cleaned = data.dropna()
+
+    # Transpose the DataFrame
+    data_transposed = data_cleaned.transpose()
+
+    return data_transposed
+
 
 def perform_clustering(data, year):
     """
@@ -55,7 +80,9 @@ def perform_clustering(data, year):
     data_year['Cluster'] = kmeans.fit_predict(scaled_data)
     return data_year
 
-def perform_data_fitting(data, target_country, target_variable, fitting_year=2025, forecast_years=5):
+
+def perform_data_fitting(data, target_country, target_variable,
+                         fitting_year=2025, forecast_years=5):
     """
     Perform data fitting, prediction, and forecast for a selected country and variable.
 
@@ -77,10 +104,12 @@ def perform_data_fitting(data, target_country, target_variable, fitting_year=202
     pd.DataFrame
         DataFrame with actual, predicted, and forecasted values.
     """
-    country_data = data.loc[[target_country], ['Year', target_variable]].dropna()
+    country_data = data.loc[[target_country],
+                            ['Year', target_variable]].dropna()
 
     if len(country_data) < 2:
-        print(f"Insufficient data points for {target_country}. Cannot perform fitting and prediction.")
+        print(
+            f"Insufficient data points for {target_country}. Cannot perform fitting and prediction.")
         return
 
     # Convert literacy rate to percentage
@@ -101,7 +130,8 @@ def perform_data_fitting(data, target_country, target_variable, fitting_year=202
     existing_conf_int = existing_predictions.conf_int()
 
     # Predict for future years (including forecast)
-    future_years = np.arange(existing_years[-1] + 1, fitting_year + forecast_years + 1).reshape(-1, 1)
+    future_years = np.arange(
+        existing_years[-1] + 1, fitting_year + forecast_years + 1).reshape(-1, 1)
     future_X = sm.add_constant(future_years)
     future_predictions = results.get_prediction(future_X)
 
@@ -112,23 +142,31 @@ def perform_data_fitting(data, target_country, target_variable, fitting_year=202
     # Combine actual, predicted, and forecasted values into a DataFrame
     result_df = pd.DataFrame({
         'Year': np.concatenate([existing_years, future_years.flatten()]),
-        'Actual': np.concatenate([country_data[target_variable].values, np.nan * np.ones(future_years.shape[0])]),
-        'Predicted': np.concatenate([existing_predicted_values, future_predicted_values]),
-        'Lower CI': np.concatenate([existing_conf_int[:, 0], future_conf_int[:, 0]]),
-        'Upper CI': np.concatenate([existing_conf_int[:, 1], future_conf_int[:, 1]])
+        'Actual': np.concatenate([country_data[target_variable].values,
+                                  np.nan * np.ones(future_years.shape[0])]),
+        'Predicted': np.concatenate([existing_predicted_values,
+                                     future_predicted_values]),
+        'Lower CI': np.concatenate([existing_conf_int[:, 0],
+                                    future_conf_int[:, 0]]),
+        'Upper CI': np.concatenate([existing_conf_int[:, 1],
+                                    future_conf_int[:, 1]])
     })
 
     # Visualize the results
     plt.figure(figsize=(10, 6))
-    plt.scatter(result_df['Year'], result_df['Actual'], label=f'{target_country} - Actual Data')
-    plt.plot(result_df['Year'], result_df['Predicted'], label=f'{target_country} - Predicted Data', linestyle='--')
+    plt.scatter(result_df['Year'], result_df['Actual'],
+                label=f'{target_country} - Actual Data')
+    plt.plot(result_df['Year'], result_df['Predicted'],
+             label=f'{target_country} - Predicted Data', linestyle='--')
     plt.fill_between(result_df['Year'], result_df['Lower CI'], result_df['Upper CI'],
                      color='gray', alpha=0.2, label='Confidence Interval')
 
     # Highlight the forecasted region
-    plt.axvspan(existing_years[-1], fitting_year + forecast_years, color='yellow', alpha=0.2, label='Forecast')
+    plt.axvspan(existing_years[-1], fitting_year + forecast_years,
+                color='yellow', alpha=0.2, label='Forecast')
 
-    plt.title(f'Time Series Fitting and Forecast for {target_country} - {target_variable}')
+    plt.title(
+        f'Time Series Fitting and Forecast for {target_country} - {target_variable}')
     plt.xlabel('Year')
     plt.ylabel(f'{target_variable} (%)')  # Display y-axis as percentage
     plt.legend()
@@ -136,14 +174,59 @@ def perform_data_fitting(data, target_country, target_variable, fitting_year=202
 
     return result_df
 
+
+def plot_literacy_forecast(years, literacy_rate, uncertainties, country_name):
+    # Define the function to fit
+    def fit_function(x, a, b, c, d):
+        return a * np.sin(b * x + c) + d
+
+    # Provide initial guesses for the parameters
+    initial_guess = [20, 0.1, 0, 80]
+
+    # Fit the function to the actual data points with uncertainties
+    params, covariance = curve_fit(
+        fit_function, years, literacy_rate, p0=initial_guess,
+        sigma=uncertainties, absolute_sigma=True, maxfev=5000
+    )
+
+    # Generate fitted values for the years from 1990 to 2030
+    future_years = np.arange(1990, 2031, 1)
+    fitted_values = fit_function(future_years, *params)
+
+    # Plot the actual data and the fitted line
+    plt.figure(figsize=(10, 6))
+    plt.plot(future_years, fitted_values,
+             label=f'{country_name} - Forecast Line', linestyle='-', color='blue')
+    plt.plot(years, literacy_rate,
+             label=f'{country_name} - Actual Data', linestyle='-', marker='o', color='green')
+
+    # Set labels and title
+    plt.xlabel('Years', fontsize=14)
+    plt.ylabel('Literacy Rate (%)', fontsize=14)
+    plt.title(f'Literacy Rate vs Years for {country_name}', fontsize=16)
+
+    # Add grid lines for better readability
+    plt.grid(True, linestyle='--', alpha=0.7)
+
+    # Customize legend
+    plt.legend(loc='upper left', fontsize=12)
+
+    # Display the plot
+    plt.show()
+
+
 # Data Loading
-data = read_csv("D:\Applied data science project/Combined_Data.csv", country_col='Country')
+data = read_csv(
+    "D:\Applied data science project/Combined_Data.csv", country_col='Country')
+
+# Clean and Transpose the DataFrame
+data_transposed = clean_and_transpose(data)
 
 # Choose a specific year for clustering
 clustering_year = 2020
 
 # Perform clustering for all countries
-all_clustered_data = perform_clustering(data, clustering_year)
+all_clustered_data = perform_clustering(data_transposed, clustering_year)
 
 # Display clustered results
 print(all_clustered_data)
@@ -152,20 +235,26 @@ print(all_clustered_data)
 plt.figure(figsize=(10, 6))
 for cluster_num in range(all_clustered_data['Cluster'].nunique()):
     cluster_data = all_clustered_data[all_clustered_data['Cluster'] == cluster_num]
-    plt.scatter(cluster_data['GDP per Capita'], cluster_data['Literacy'], label=f'Cluster {cluster_num}')
+    plt.scatter(cluster_data['Happiness Score'],
+                cluster_data['GDP per Capita'], label=f'Cluster {cluster_num}')
 
 plt.title(f'Clustering for All Countries in {clustering_year}')
-plt.xlabel('GDP per Capita')
-plt.ylabel('Literacy Rate')
+plt.xlabel('Happiness Score')
+plt.ylabel('GDP per Capita')
 plt.legend()
 plt.show()
 
-# Choose a specific country, variable, fitting year, and forecast years
-selected_country = "United States"
-selected_variable = "Literacy"
-fitting_year = 2025
-forecast_years = 5
+# Perform data fitting, prediction, and forecast for a specific country and variable
+# (You can add specific country, variable, fitting year, and forecast years if needed)
 
-# Perform data fitting, prediction, and forecast
-result_df = perform_data_fitting(data, selected_country, selected_variable, fitting_year, forecast_years)
-print(result_df)
+# Plot literacy forecast for Afghanistan
+afghanistan_years, afghanistan_literacy_rate, afghanistan_uncertainties = read_csv(
+    "D:\Applied data science project/Combined_Data.csv", "Afghanistan")
+plot_literacy_forecast(afghanistan_years, afghanistan_literacy_rate,
+                       afghanistan_uncertainties, 'Afghanistan')
+
+# Plot literacy forecast for Norway
+norway_years, norway_literacy_rate, norway_uncertainties = read_csv(
+    "D:\Applied data science project/Combined_Data.csv", "Norway")
+plot_literacy_forecast(norway_years, norway_literacy_rate,
+                       norway_uncertainties, 'Norway')
