@@ -89,3 +89,28 @@ def perform_clustering(data):
         clustered_data = pd.concat([clustered_data, country_data])
 
     return clustered_data
+
+# Data Loading, Transposition, and Cleaning
+data = read_csv(
+    "D:\Applied data science project/Combined_Data.csv", country_col='Country')
+
+# Perform clustering for all countries
+all_clustered_data = perform_clustering(data)
+
+# Display clustered results
+print(all_clustered_data)
+
+# Plot the clustered results
+plt.figure(figsize=(10, 6))
+
+# Scatter plot for each cluster
+for cluster_num in range(all_clustered_data['Cluster'].nunique()):
+    cluster_data = all_clustered_data[all_clustered_data['Cluster'] == cluster_num]
+    plt.scatter(cluster_data['GDP per Capita'],
+                cluster_data['Literacy'], label=f'Cluster {cluster_num}')
+
+plt.title('Clustering for All Countries')
+plt.xlabel('GDP per Capita')
+plt.ylabel('Literacy Rate')
+plt.legend()
+plt.show()
